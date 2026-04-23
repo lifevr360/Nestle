@@ -7,9 +7,13 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 /// <summary>
 /// Place one HotspotController on each hotspot root GameObject.
-/// Assign the hotspotIcon (world-space billboard with Collider),
-/// uiHotspotPanel and videoHotspotPanel child prefab instances in the Inspector.
-/// Set timing, type and content — HotspotManager drives Show/Hide/AutoTrigger.
+///
+/// The hotspotIcon (mesh/billboard) IS the toggle button — clicking it opens the panel,
+/// clicking it again closes the panel. There is no separate close button.
+/// HotspotManager ensures only one panel is open at a time.
+///
+/// UI hotspot shows BodyText only (no header).
+/// Video hotspot shows the video only (no caption).
 /// </summary>
 public class HotspotController : MonoBehaviour
 {
@@ -35,17 +39,15 @@ public class HotspotController : MonoBehaviour
 
     // ── UI Content ────────────────────────────────────────────────────────────
     [Header("UI Hotspot Content (only used when HotspotType = UI)")]
-    public string headerText;
     [TextArea(2, 6)] public string bodyText;
 
     // ── Video Content ─────────────────────────────────────────────────────────
     [Header("Video Hotspot Content (only used when HotspotType = Video)")]
     public VideoClip hotspotVideoClip;
-    [TextArea(2, 4)] public string captionText;
 
     // ── Scene References ──────────────────────────────────────────────────────
-    [Header("Child Prefab Instances (assign in Inspector, start disabled)")]
-    [Tooltip("The billboard icon / button with a Collider (and optionally XRSimpleInteractable).")]
+    [Header("Child References (assign in Inspector)")]
+    [Tooltip("The 3D mesh/icon that acts as a toggle button. Needs a Collider. Optionally add XRSimpleInteractable for VR.")]
     public GameObject hotspotIcon;
 
     [Tooltip("UI panel prefab instance — child of this GameObject.")]
@@ -265,22 +267,17 @@ public class HotspotController : MonoBehaviour
 
     /// <summary>
     /// Inject text into the panel's TextMeshProUGUI children.
-    /// UI panel: [0] = header, [1] = body.
-    /// Video panel: [0] = caption.
+    /// UI panel:    texts[0] = bodyText only.
+    /// Video panel: no text — video only.
     /// </summary>
     private void InitializeContent()
     {
         if (hotspotType == HotspotType.UI && uiHotspotPanel != null)
         {
             TextMeshProUGUI[] texts = uiHotspotPanel.GetComponentsInChildren<TextMeshProUGUI>(true);
-            if (texts.Length > 0) texts[0].text = headerText;
-            if (texts.Length > 1) texts[1].text = bodyText;
+            if (texts.Length > 0) texts[0].text = bodyText;
         }
-        else if (hotspotType == HotspotType.Video && videoHotspotPanel != null)
-        {
-            TextMeshProUGUI[] texts = videoHotspotPanel.GetComponentsInChildren<TextMeshProUGUI>(true);
-            if (texts.Length > 0) texts[0].text = captionText;
-        }
+        // Video panel: no text content to inject
     }
 
     #endregion

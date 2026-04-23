@@ -25,6 +25,9 @@ public class HotspotManager : MonoBehaviour
     // ── Private State ─────────────────────────────────────────────────────────
     private bool _pausedForVideoHotspot = false;
 
+    // Tracks the currently open hotspot so we can close it when another opens
+    private HotspotController _currentOpenHotspot = null;
+
     // ─────────────────────────────────────────────────────────────────────────
     #region Unity Lifecycle
 
@@ -69,6 +72,7 @@ public class HotspotManager : MonoBehaviour
         SubscribeAll(hotspots);
 
         _pausedForVideoHotspot = false;
+        _currentOpenHotspot = null;
     }
 
     /// <summary>Resets all hotspots to their initial hidden state.</summary>
@@ -76,6 +80,9 @@ public class HotspotManager : MonoBehaviour
     {
         foreach (HotspotController h in hotspots)
             if (h != null) h.ResetHotspot();
+
+        _currentOpenHotspot = null;
+        _pausedForVideoHotspot = false;
     }
 
     #endregion
@@ -108,6 +115,16 @@ public class HotspotManager : MonoBehaviour
 
     private void OnPanelOpened(HotspotController hotspot)
     {
+        // Close any currently open hotspot before opening the new one
+        if (_currentOpenHotspot != null && _currentOpenHotspot != hotspot)
+        {
+            _currentOpenHotspot.ClosePanel();
+            // If we were paused for a video hotspot and a different one is opening,
+            // the resume will be handled by OnPanelClosed below first.
+        }
+
+        _currentOpenHotspot = hotspot;
+
         // Pause main video only for Video hotspots
         if (hotspot.hotspotType == HotspotController.HotspotType.Video)
         {
@@ -121,12 +138,19 @@ public class HotspotManager : MonoBehaviour
 
     private void OnPanelClosed(HotspotController hotspot)
     {
+        if (_currentOpenHotspot == hotspot)
+            _currentOpenHotspot = null;
+
         // Resume main video if we paused it for this Video hotspot
         if (hotspot.hotspotType == HotspotController.HotspotType.Video && _pausedForVideoHotspot)
         {
-            if (mainVideoPlayer != null)
-                mainVideoPlayer.Play();
-            _pausedForVideoHotspot = false;
+            // Only resume if no other hotspot is now open
+            if (_currentOpenHotspot == null)
+            {
+                if (mainVideoPlayer != null)
+                    mainVideoPlayer.Play();
+                _pausedForVideoHotspot = false;
+            }
         }
     }
 
