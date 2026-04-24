@@ -52,6 +52,7 @@ public class VideoManager : MonoBehaviour
     {
          DisableAllTimedObjects();
         videoPlayer.loopPointReached += OnVideoFinished;
+        PlayVideo(9);
     }
     private void Update()
     {
