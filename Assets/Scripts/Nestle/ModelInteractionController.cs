@@ -1,72 +1,98 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
-public class ModelInteractionController : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+public class ModelInteractionController : MonoBehaviour
 {
-    [Header("Rotation Settings")]
-    public float rotationSpeed = 100f;
-
+    [Header("Rotation Limits")]
     public float minX = -45f;
     public float maxX = 45f;
 
     public float minY = -180f;
     public float maxY = 180f;
 
+    [Header("Smooth Rotation")]
+    public float rotationSmoothSpeed = 5f;
+
     private float currentX;
     private float currentY;
 
-    private bool rotateLeft;
-    private bool rotateRight;
-    private bool rotateUp;
-    private bool rotateDown;
+    private float targetX;
+    private float targetY;
+
+    [Header("UI References")]
+    public Scrollbar horizontalScrollbar; // Left-Right (Y axis)
+    public Scrollbar verticalScrollbar;   // Up-Down (X axis)
 
     [Header("Zoom Settings")]
-    public float zoomSpeed = 0.5f;
+    public float zoomStep = 0.2f;
     public float minScale = 0.5f;
     public float maxScale = 2f;
 
-    private bool isHovering = false;
-
+    public GameObject model;
     void Start()
     {
-        Vector3 angles = transform.localEulerAngles;
+        Vector3 angles = model.transform.localEulerAngles;
 
         currentX = angles.x;
         currentY = angles.y;
+
+        targetX = currentX;
+        targetY = currentY;
+
+       if (horizontalScrollbar != null)
+        {
+             horizontalScrollbar.value = 0.5f;
+        }
+
+       if (verticalScrollbar != null)
+        {
+             verticalScrollbar.value = 0.5f;
+        }
+           
+        // Also reset target to center position
+        targetY = Mathf.Lerp(minY, maxY, 0.5f);
+        targetX = Mathf.Lerp(minX, maxX, 0.5f);
+
+        currentY = targetY;
+        currentX = targetX;
+
+         model.transform.localRotation = Quaternion.Euler(currentX, currentY, 0f);
     }
 
     void Update()
     {
-        HandleRotation();
-        HandleMouseZoom();
-        HandleTouchZoom();
+        HandleScrollbarInput();
+        SmoothRotate();
+
     }
 
-    // ---------------- ROTATION ----------------
+    // ---------------- SCROLLBAR INPUT ----------------
 
-    void HandleRotation()
+    void HandleScrollbarInput()
     {
-        if (rotateLeft)
-            currentY -= rotationSpeed * Time.deltaTime;
+        if (horizontalScrollbar != null)
+        {
+            targetY = Mathf.Lerp(minY, maxY, horizontalScrollbar.value);
+        }
 
-        if (rotateRight)
-            currentY += rotationSpeed * Time.deltaTime;
-
-        if (rotateUp)
-            currentX -= rotationSpeed * Time.deltaTime;
-
-        if (rotateDown)
-            currentX += rotationSpeed * Time.deltaTime;
-
-        ApplyRotation();
+        if (verticalScrollbar != null)
+        {
+            targetX = Mathf.Lerp(minX, maxX, verticalScrollbar.value);
+        }
     }
 
-    void ApplyRotation()
+    // ---------------- SMOOTH ROTATION ----------------
+
+    void SmoothRotate()
     {
+        currentX = Mathf.Lerp(currentX, targetX, Time.deltaTime * rotationSmoothSpeed);
+        currentY = Mathf.Lerp(currentY, targetY, Time.deltaTime * rotationSmoothSpeed);
+
         currentX = ClampAngle(currentX, minX, maxX);
         currentY = ClampAngle(currentY, minY, maxY);
 
-        transform.localRotation = Quaternion.Euler(currentX, currentY, 0f);
+         model.transform.localRotation = Quaternion.Euler(currentX, currentY, 0f);
     }
 
     float ClampAngle(float angle, float min, float max)
@@ -75,71 +101,26 @@ public class ModelInteractionController : MonoBehaviour, IPointerEnterHandler, I
         return Mathf.Clamp(angle, min, max);
     }
 
-    // ---------------- BUTTON EVENTS ----------------
+    // ---------------- ZOOM BUTTONS ----------------
 
-    public void OnLeftDown() => rotateLeft = true;
-    public void OnLeftUp() => rotateLeft = false;
-
-    public void OnRightDown() => rotateRight = true;
-    public void OnRightUp() => rotateRight = false;
-
-    public void OnUpDown() => rotateUp = true;
-    public void OnUpUp() => rotateUp = false;
-
-    public void OnDownDown() => rotateDown = true;
-    public void OnDownUp() => rotateDown = false;
-
-    // ---------------- ZOOM ----------------
-
-    void HandleMouseZoom()
+    public void ZoomIn()
     {
-        if (!isHovering) return;
-
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-
-        if (Mathf.Abs(scroll) > 0.01f)
-        {
-            Zoom(scroll * zoomSpeed);
-        }
+        Zoom(zoomStep);
     }
 
-    void HandleTouchZoom()
+    public void ZoomOut()
     {
-        if (Input.touchCount != 2) return;
-
-        Touch t1 = Input.GetTouch(0);
-        Touch t2 = Input.GetTouch(1);
-
-        Vector2 prevPos1 = t1.position - t1.deltaPosition;
-        Vector2 prevPos2 = t2.position - t2.deltaPosition;
-
-        float prevMagnitude = (prevPos1 - prevPos2).magnitude;
-        float currentMagnitude = (t1.position - t2.position).magnitude;
-
-        float difference = currentMagnitude - prevMagnitude;
-
-        Zoom(difference * zoomSpeed * 0.01f);
+        Zoom(-zoomStep);
     }
 
     void Zoom(float increment)
     {
-        Vector3 newScale = transform.localScale + Vector3.one * increment;
+        Vector3 newScale =  model.transform.localScale + Vector3.one * increment;
 
         float clamped = Mathf.Clamp(newScale.x, minScale, maxScale);
 
-        transform.localScale = new Vector3(clamped, clamped, clamped);
+         model.transform.localScale = new Vector3(clamped, clamped, clamped);
     }
 
-    // ---------------- HOVER ----------------
-
-    public void OnPointerEnter(PointerEventData eventData)
-    {
-        Debug.Log("Pointer entered");
-        isHovering = true;
-    }
-
-    public void OnPointerExit(PointerEventData eventData)
-    {
-        isHovering = false;
-    }
+ 
 }

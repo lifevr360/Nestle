@@ -44,6 +44,8 @@ public class VideoManager : MonoBehaviour
 
     private Language selectedLanguage = Language.English;
     private int currentVideoIndex = -1;
+    private bool isPaused = false;
+    private bool isAudioEnabled = true;
 
     #endregion
 
@@ -111,18 +113,75 @@ public class VideoManager : MonoBehaviour
         StartCoroutine(StartPlayingVideo(videoIndex));
     }
 
+    public void PauseVideo()
+    {
+        if (videoPlayer.isPlaying)
+        {
+            videoPlayer.Pause();
+            voiceOverAudioSource.Pause();
+            isPaused = true;
+            Debug.Log("Video Paused");
+        }
+    }
+
+    public void ResumeVideo()
+    {
+        if (isPaused)
+        {
+            videoPlayer.Play();
+
+            // Resume external audio only if it exists
+            if (voiceOverAudioSource.clip != null)
+            {
+                voiceOverAudioSource.UnPause();
+            }
+
+            isPaused = false;
+            Debug.Log("Video Resumed");
+        }
+    }
+
+    public void ToggleAudio(bool enable)
+    {
+        isAudioEnabled = enable;
+
+        //  Handle embedded video audio
+        videoPlayer.SetDirectAudioMute(0, !enable);
+
+        // Handle external audio
+        if (enable)
+        {
+            if (voiceOverAudioSource.clip != null && !voiceOverAudioSource.isPlaying)
+            {
+                voiceOverAudioSource.UnPause();
+            }
+        }
+        else
+        {
+            voiceOverAudioSource.Pause();
+        }
+
+        Debug.Log("Audio Enabled: " + enable);
+    }
+
     private IEnumerator StartPlayingVideo(int index)
     {
         string videoURL = baseVideoURL + index + ".mp4";
-
+        Debug.Log("video from: " + videoURL);
         videoPlayer.url = videoURL;
-        videoPlayer.Prepare();
+     
+        //  Ensure embedded audio follows toggle state
+        videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+        videoPlayer.EnableAudioTrack(0, true);
+        videoPlayer.SetDirectAudioMute(0, !isAudioEnabled);
 
+        videoPlayer.Prepare();
+       
         while (!videoPlayer.isPrepared)
         {
             yield return null;
         }
-
+        
         AudioClip selectedClip = (selectedLanguage == Language.Hindi)
             ? videoList[index].hindiAudioClip
             : videoList[index].englishAudioClip;
@@ -134,8 +193,13 @@ public class VideoManager : MonoBehaviour
         else
         {
             PlayVoiceOver(selectedClip);
-        }
 
+            if (!isAudioEnabled)
+            {
+                voiceOverAudioSource.Pause();
+            }
+        }
+        Debug.Log("4");
         videoPlayer.Play();
         currentVideoIndex = index;
 
