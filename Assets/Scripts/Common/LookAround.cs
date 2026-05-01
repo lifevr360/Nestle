@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class LookAround : MonoBehaviour
 {
@@ -47,6 +48,13 @@ public class LookAround : MonoBehaviour
             lastMousePosition = Input.mousePosition;
             return;
         }
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+         
+
         else if (Input.GetMouseButton(0))
         {
             Vector2 mouseDelta = (Vector2)Input.mousePosition - lastMousePosition;
@@ -73,6 +81,10 @@ public class LookAround : MonoBehaviour
         {
             Touch touch = Input.GetTouch(0);
 
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+            {return;}
+            
+            
             if (touch.phase == TouchPhase.Began)
             {
                 lastTouchPosition = touch.position;
