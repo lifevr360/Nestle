@@ -6172,6 +6172,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   nestleMapObject: {fileID: 919132147673316509}
+  videoManager: {fileID: 654941375}
 --- !u!1 &884857414
 GameObject:
   m_ObjectHideFlags: 0
