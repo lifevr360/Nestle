@@ -47,7 +47,7 @@ public class ModelInteractionController : MonoBehaviour
 
        if (verticalScrollbar != null)
         {
-             verticalScrollbar.value = 0.5f;
+             verticalScrollbar.value = 1f;
         }
            
         // Also reset target to center position

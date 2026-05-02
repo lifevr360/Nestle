@@ -8,30 +8,11 @@ public class VideoManager : MonoBehaviour
 {
     #region Public Variables
 
-    [System.Serializable]
-    public class TimedObject
-    {
-        public GameObject targetObject;
-        public float triggerTime;
-        public float endTime;
-
-        [HideInInspector] public bool hasStarted;
-        [HideInInspector] public bool hasEnded;
-    }
-
-    [System.Serializable]
-    public class VideoData
-    {
-        public AudioClip hindiAudioClip;
-        public AudioClip englishAudioClip;
-        public List<TimedObject> timedObjects;
-    }
-
     // ── One step = one node in the seekbar ──────────────────────────────────
     [System.Serializable]
     public class SectionStep
     {
-        [Tooltip("Which index in videoList to play for this step")]
+        [Tooltip("Which video index (filename) to stream for this step")]
         public int videoIndex;
 
         [Tooltip("The circular node Button for this step")]
@@ -39,6 +20,15 @@ public class VideoManager : MonoBehaviour
 
         [Tooltip("The Slider AFTER this node (null for the last node)")]
         public Slider progressSlider;
+
+        [Tooltip("Objects to enable while this step's video is playing")]
+        public List<GameObject> activeObjects;
+
+        [Tooltip("Hindi voice-over for this step")]
+        public AudioClip hindiAudioClip;
+
+        [Tooltip("English voice-over for this step")]
+        public AudioClip englishAudioClip;
     }
 
     // ── One section = a full seekbar row ────────────────────────────────────
@@ -62,9 +52,6 @@ public class VideoManager : MonoBehaviour
     public GameObject onVideoEndObject;
     public AudioSource voiceOverAudioSource;
 
-    [Header("Video Data")]
-    public List<VideoData> videoList;
-
     [Header("Sections")]
     public List<SectionData> sectionList;
 
@@ -73,7 +60,6 @@ public class VideoManager : MonoBehaviour
     #region Private Variables
 
     private Language selectedLanguage = Language.English;
-    private int currentVideoIndex = -1;
     private bool isPaused = false;
     private bool isAudioEnabled = true;
 
@@ -89,24 +75,16 @@ public class VideoManager : MonoBehaviour
 
     void Start()
     {
-        DisableAllTimedObjects();
+        DisableAllStepObjects();
         videoPlayer.loopPointReached += OnVideoFinished;
-        PlayVideo(9);
+        PlaySection(0);
     }
 
     private void Update()
     {
-        // Drive timed objects for regular (non-section) videos
-        if (!isSectionPlaying && currentVideoIndex >= 0 && videoPlayer.isPlaying)
-        {
-            CheckTimedObjects(currentVideoIndex);
-        }
-
-        // Drive active slider fill from real video time
         if (isSectionPlaying && videoPlayer.isPlaying && currentSectionIndex >= 0 && currentStepIndex >= 0)
         {
             DriveActiveSlider();
-            CheckTimedObjects(currentVideoIndex);
         }
     }
 
@@ -125,8 +103,9 @@ public class VideoManager : MonoBehaviour
             return;
         }
 
-        // Hide all seekbars, show the right one
         HideAllSeekbars();
+        DisableAllStepObjects();
+
         var section = sectionList[sectionIndex];
         if (section.seekbarRoot != null)
             section.seekbarRoot.SetActive(true);
@@ -137,23 +116,18 @@ public class VideoManager : MonoBehaviour
 
         ToggleEndObject(false);
 
-        // Wire up button listeners fresh each time
         RegisterStepButtonListeners(sectionIndex);
-
-        // Reset all sliders to 0
         ResetSectionSliders(sectionIndex);
 
-        // Start from step 0
         JumpToStep(0, false);
     }
 
     /// <summary>
-    /// Called when user clicks a node button. Public so buttons can call it via inspector too.
+    /// Called when user clicks a node button.
     /// </summary>
     public void OnStepButtonClicked(int stepIndex)
     {
         if (!isSectionPlaying) return;
-       
         JumpToStep(stepIndex, true);
     }
 
@@ -163,7 +137,6 @@ public class VideoManager : MonoBehaviour
 
     private void JumpToStep(int targetStep, bool userInitiated)
     {
-         Debug.Log("index" + targetStep);
         var section = sectionList[currentSectionIndex];
 
         if (targetStep < 0 || targetStep >= section.steps.Count) return;
@@ -180,37 +153,40 @@ public class VideoManager : MonoBehaviour
         }
         else if (targetStep < currentStepIndex)
         {
-            // Jumped backward — empty all sliders from target onward
+            // Jumped backward — empty sliders from target onward
             for (int i = targetStep; i <= currentStepIndex; i++)
             {
                 if (section.steps[i].progressSlider != null)
                     section.steps[i].progressSlider.value = 0f;
             }
         }
-        // Same step clicked — slider resets to 0 and video restarts
         else if (userInitiated)
         {
+            // Same step clicked — restart slider
             if (section.steps[targetStep].progressSlider != null)
                 section.steps[targetStep].progressSlider.value = 0f;
         }
 
+        // Disable previous step's objects before switching
+        if (currentStepIndex >= 0 && currentStepIndex < section.steps.Count)
+            SetStepObjects(section.steps[currentStepIndex], false);
+
         currentStepIndex = targetStep;
 
-        // Stop any in-flight coroutine
         if (sectionCoroutine != null)
             StopCoroutine(sectionCoroutine);
 
-        int vidIndex = section.steps[targetStep].videoIndex;
-        sectionCoroutine = StartCoroutine(PlayStepVideo(vidIndex));
+        sectionCoroutine = StartCoroutine(PlayStepVideo(section.steps[targetStep]));
     }
 
-    private IEnumerator PlayStepVideo(int videoIndex)
+    private IEnumerator PlayStepVideo(SectionStep step)
     {
         StopVideoAndAudio();
-        DisableAllTimedObjects();
-        ResetTimedObjects(videoIndex);
 
-        string url = baseVideoURL + videoIndex + ".mp4";
+        // Disable all objects first, then enable only the current step's after prepare
+        DisableAllStepObjects();
+
+        string url = baseVideoURL + step.videoIndex + ".mp4";
         Debug.Log("Section playing video: " + url);
 
         videoPlayer.url = url;
@@ -222,11 +198,12 @@ public class VideoManager : MonoBehaviour
         while (!videoPlayer.isPrepared)
             yield return null;
 
-        currentVideoIndex = videoIndex;
+        // Enable this step's objects now that video is ready
+        SetStepObjects(step, true);
 
         AudioClip clip = (selectedLanguage == Language.Hindi)
-            ? videoList[videoIndex].hindiAudioClip
-            : videoList[videoIndex].englishAudioClip;
+            ? step.hindiAudioClip
+            : step.englishAudioClip;
 
         if (clip == null)
             voiceOverAudioSource.Stop();
@@ -255,46 +232,59 @@ public class VideoManager : MonoBehaviour
         step.progressSlider.value = Mathf.Clamp01(t);
     }
 
-    /// <summary>
-    /// Called by loopPointReached. Handles both section auto-advance and regular video end.
-    /// </summary>
     private void OnVideoFinished(VideoPlayer vp)
     {
         if (isSectionPlaying)
-        {
             OnSectionStepFinished();
-        }
-        else
-        {
-            Debug.Log("Video finished: " + currentVideoIndex);
-            ToggleEndObject(true);
-        }
     }
 
     private void OnSectionStepFinished()
     {
         var section = sectionList[currentSectionIndex];
+        var currentStep = section.steps[currentStepIndex];
 
         // Fill current slider fully
-        if (section.steps[currentStepIndex].progressSlider != null)
-            section.steps[currentStepIndex].progressSlider.value = 1f;
+        if (currentStep.progressSlider != null)
+            currentStep.progressSlider.value = 1f;
 
         int nextStep = currentStepIndex + 1;
 
         if (nextStep >= section.steps.Count)
         {
             // All steps done
-            Debug.Log("Section " + currentSectionIndex + " complete.");
+            SetStepObjects(currentStep, false);
             isSectionPlaying = false;
-            // Hide this section's seekbar before showing the end object
-            if (sectionList[currentSectionIndex].seekbarRoot != null)
-                sectionList[currentSectionIndex].seekbarRoot.SetActive(false);
+            if (section.seekbarRoot != null)
+                section.seekbarRoot.SetActive(false);
             ToggleEndObject(true);
+            Debug.Log("Section " + currentSectionIndex + " complete.");
             return;
         }
 
-        // Auto-advance
+        // Auto-advance to next step
         JumpToStep(nextStep, false);
+    }
+
+    /// <summary>
+    /// Enables or disables all objects in a step's activeObjects list.
+    /// </summary>
+    private void SetStepObjects(SectionStep step, bool state)
+    {
+        if (step.activeObjects == null) return;
+        foreach (var obj in step.activeObjects)
+        {
+            if (obj != null) obj.SetActive(state);
+        }
+    }
+
+    /// <summary>
+    /// Disables every activeObject across all sections and steps.
+    /// </summary>
+    private void DisableAllStepObjects()
+    {
+        foreach (var section in sectionList)
+            foreach (var step in section.steps)
+                SetStepObjects(step, false);
     }
 
     private void RegisterStepButtonListeners(int sectionIndex)
@@ -302,7 +292,7 @@ public class VideoManager : MonoBehaviour
         var section = sectionList[sectionIndex];
         for (int i = 0; i < section.steps.Count; i++)
         {
-            int capturedIndex = i; // capture for closure
+            int capturedIndex = i;
             var btn = section.steps[i].nodeButton;
             if (btn != null)
             {
@@ -332,30 +322,7 @@ public class VideoManager : MonoBehaviour
 
     #endregion
 
-    #region Regular Video API (unchanged)
-
-    public void PlayVideo(int videoIndex)
-    {
-        if (videoIndex == currentVideoIndex && videoPlayer.isPlaying) return;
-
-        if (videoIndex < 0 || videoIndex >= videoList.Count)
-        {
-            Debug.LogError("Invalid video index: " + videoIndex);
-            return;
-        }
-
-        // Exit section mode if active
-        isSectionPlaying = false;
-        HideAllSeekbars();
-
-        StopAllCoroutines();
-        StopVideoAndAudio();
-        DisableAllTimedObjects();
-        ResetTimedObjects(videoIndex);
-        ToggleEndObject(false);
-
-        StartCoroutine(StartPlayingVideo(videoIndex));
-    }
+    #region Public Video Controls
 
     public void PauseVideo()
     {
@@ -415,82 +382,6 @@ public class VideoManager : MonoBehaviour
     #endregion
 
     #region Private Helpers
-
-    private IEnumerator StartPlayingVideo(int index)
-    {
-        string videoURL = baseVideoURL + index + ".mp4";
-        Debug.Log("Playing video from: " + videoURL);
-
-        videoPlayer.url = videoURL;
-        videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
-        videoPlayer.EnableAudioTrack(0, true);
-        videoPlayer.SetDirectAudioMute(0, !isAudioEnabled);
-        videoPlayer.Prepare();
-
-        while (!videoPlayer.isPrepared)
-            yield return null;
-
-        AudioClip selectedClip = (selectedLanguage == Language.Hindi)
-            ? videoList[index].hindiAudioClip
-            : videoList[index].englishAudioClip;
-
-        if (selectedClip == null)
-            voiceOverAudioSource.Stop();
-        else
-        {
-            PlayVoiceOver(selectedClip);
-            if (!isAudioEnabled) voiceOverAudioSource.Pause();
-        }
-
-        videoPlayer.Play();
-        currentVideoIndex = index;
-        isPaused = false;
-    }
-
-    private void CheckTimedObjects(int videoIndex)
-    {
-        if (videoIndex < 0 || videoIndex >= videoList.Count) return;
-
-        var videoData = videoList[videoIndex];
-        double currentTime = videoPlayer.time;
-
-        foreach (var item in videoData.timedObjects)
-        {
-            if (!item.hasStarted && currentTime >= item.triggerTime)
-            {
-                if (item.targetObject != null) item.targetObject.SetActive(true);
-                item.hasStarted = true;
-            }
-
-            if (!item.hasEnded && currentTime >= item.endTime)
-            {
-                if (item.targetObject != null) item.targetObject.SetActive(false);
-                item.hasEnded = true;
-            }
-        }
-    }
-
-    private void ResetTimedObjects(int index)
-    {
-        if (index < 0 || index >= videoList.Count) return;
-        foreach (var item in videoList[index].timedObjects)
-        {
-            item.hasStarted = false;
-            item.hasEnded = false;
-            if (item.targetObject != null) item.targetObject.SetActive(false);
-        }
-    }
-
-    private void DisableAllTimedObjects()
-    {
-        foreach (var video in videoList)
-        {
-            foreach (var item in video.timedObjects)
-            {
-                if (item.targetObject != null) item.targetObject.SetActive(false);
-            }
-        }
-    }
 
     private void PlayVoiceOver(AudioClip clip)
     {
