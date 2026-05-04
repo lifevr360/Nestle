@@ -77,7 +77,7 @@ public class VideoManager : MonoBehaviour
     {
         DisableAllStepObjects();
         videoPlayer.loopPointReached += OnVideoFinished;
-        PlaySection(0);
+        PlaySection(1);
     }
 
     private void Update()
