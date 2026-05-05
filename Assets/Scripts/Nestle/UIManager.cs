@@ -24,10 +24,12 @@ public class UIManager : MonoBehaviour
             {
                 if (newState)
                 {
+                    videoManager.PauseVideo();
                     videoManager.SetSeekbarVisible(false);
                 }
                 else
                 {
+                    videoManager.ResumeVideo();
                     videoManager.SetSeekbarVisible(true);
                 }
             }

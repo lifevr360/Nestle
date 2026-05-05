@@ -51,6 +51,8 @@ public class VideoManager : MonoBehaviour
     public VideoPlayer videoPlayer;
     public GameObject onVideoEndObject;
     public AudioSource voiceOverAudioSource;
+    public GameObject videoPausebtn;
+    public GameObject videoResumebtn;
 
     [Header("Sections")]
     public List<SectionData> sectionList;
@@ -236,6 +238,9 @@ public class VideoManager : MonoBehaviour
 
         videoPlayer.Play();
         isPaused = false;
+        SwapSkybox(false);
+        videoPausebtn.SetActive(true);
+        videoResumebtn.SetActive(false);
     }
 
     /// <summary>
@@ -360,6 +365,8 @@ public class VideoManager : MonoBehaviour
             isPaused = true;
             SwapSkybox(true);   // ← swap to pause material
             Debug.Log("Video Paused");
+            videoPausebtn.SetActive(false);
+            videoResumebtn.SetActive(true);
         }
     }
 
@@ -373,6 +380,8 @@ public class VideoManager : MonoBehaviour
             isPaused = false;
             SwapSkybox(false);  // ← revert to render texture material
             Debug.Log("Video Resumed");
+            videoPausebtn.SetActive(true);
+            videoResumebtn.SetActive(false);
         }
     }
 
