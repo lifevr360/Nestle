@@ -55,6 +55,12 @@ public class VideoManager : MonoBehaviour
     [Header("Sections")]
     public List<SectionData> sectionList;
 
+    [Header("Skybox Materials")]
+    public Material skyboxPlayMaterial;   // your render texture material
+    public Material skyboxPauseMaterial;  // your semi-transparent / frosted material
+
+    private Coroutine overlayCoroutine;
+
     #endregion
 
     #region Private Variables
@@ -77,7 +83,13 @@ public class VideoManager : MonoBehaviour
     {
         DisableAllStepObjects();
         videoPlayer.loopPointReached += OnVideoFinished;
-        PlaySection(1);
+        StartCoroutine(DelayedStart());
+    }
+
+    private IEnumerator DelayedStart()
+    {
+        yield return new WaitForSeconds(1f); // wait one frame for all components to initialize
+        PlaySection(0);
     }
 
     private void Update()
@@ -182,8 +194,6 @@ public class VideoManager : MonoBehaviour
     private IEnumerator PlayStepVideo(SectionStep step)
     {
         StopVideoAndAudio();
-
-        // Disable all objects first, then enable only the current step's after prepare
         DisableAllStepObjects();
 
         string url = baseVideoURL + step.videoIndex + ".mp4";
@@ -198,7 +208,18 @@ public class VideoManager : MonoBehaviour
         while (!videoPlayer.isPrepared)
             yield return null;
 
-        // Enable this step's objects now that video is ready
+        // ── Force audio re-init (mirrors the disable/enable fix you discovered) ──
+        videoPlayer.gameObject.SetActive(false);
+        yield return null;                  // one frame off
+        videoPlayer.gameObject.SetActive(true);
+        yield return null;                  // one frame back on
+                                            // ────────────────────────────────────────────────────────────────────────
+
+        // Re-apply audio settings after re-enable
+        videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+        videoPlayer.EnableAudioTrack(0, true);
+        videoPlayer.SetDirectAudioMute(0, !isAudioEnabled);
+
         SetStepObjects(step, true);
 
         AudioClip clip = (selectedLanguage == Language.Hindi)
@@ -320,6 +341,12 @@ public class VideoManager : MonoBehaviour
         }
     }
 
+    private void SwapSkybox(bool paused)
+    {
+        RenderSettings.skybox = paused ? skyboxPauseMaterial : skyboxPlayMaterial;
+        DynamicGI.UpdateEnvironment(); // ensures lighting updates with the new skybox
+    }
+
     #endregion
 
     #region Public Video Controls
@@ -331,6 +358,7 @@ public class VideoManager : MonoBehaviour
             videoPlayer.Pause();
             voiceOverAudioSource.Pause();
             isPaused = true;
+            SwapSkybox(true);   // ← swap to pause material
             Debug.Log("Video Paused");
         }
     }
@@ -343,6 +371,7 @@ public class VideoManager : MonoBehaviour
             if (voiceOverAudioSource.clip != null)
                 voiceOverAudioSource.UnPause();
             isPaused = false;
+            SwapSkybox(false);  // ← revert to render texture material
             Debug.Log("Video Resumed");
         }
     }
@@ -379,6 +408,14 @@ public class VideoManager : MonoBehaviour
         }
     }
 
+    public void SetSeekbarVisible(bool visible)
+    {
+        if (currentSectionIndex < 0 || currentSectionIndex >= sectionList.Count) return;
+
+        var seekbar = sectionList[currentSectionIndex].seekbarRoot;
+        if (seekbar != null)
+            seekbar.SetActive(visible);
+    }
     #endregion
 
     #region Private Helpers

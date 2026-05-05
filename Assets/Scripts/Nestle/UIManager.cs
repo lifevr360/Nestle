@@ -24,13 +24,11 @@ public class UIManager : MonoBehaviour
             {
                 if (newState)
                 {
-                    // Map opened → Pause video
-                    videoManager.PauseVideo();
+                    videoManager.SetSeekbarVisible(false);
                 }
                 else
                 {
-                    // Map closed → Resume video
-                    videoManager.ResumeVideo();
+                    videoManager.SetSeekbarVisible(true);
                 }
             }
         }
